@@ -1,0 +1,14 @@
+.idea/
+out/
+dist/
+vendor/
+test/
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+snowcrash
