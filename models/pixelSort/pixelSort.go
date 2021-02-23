@@ -1,21 +1,16 @@
 package pixelSort
 
 import (
-	"fmt"
-	"math/rand"
+	"image"
 	"sort"
 
 	"git.neveris.one/gryffyn/snowcrash/utils"
-	"github.com/davecgh/go-spew/spew"
 )
 
-type HSV int
-
-const (
-	Hue        HSV = iota
-	Saturation HSV = iota
-	Value      HSV = iota
-)
+// Returns brightness (sum of RGBA values)
+func b(p utils.PixelRGBA) uint32 {
+	return p.A + p.B + p.G + p.R
+}
 
 /*
 def threshold(image, lower_threshold, upper_threshold, **kwargs):
@@ -31,13 +26,13 @@ def threshold(image, lower_threshold, upper_threshold, **kwargs):
 */
 
 // Function is from above python code.
-func threshold(i utils.Image, lower, upper int) [][]int {
+func threshold(i utils.Image, lower, upper uint32) [][]int {
 	var intervals [][]int
 	for y := 0; y < i.Bounds.Max.Y; y++ {
 		intervals = append(intervals, []int{})
 		for x := 0; x < i.Bounds.Max.X; y++ {
-			val := i.Pixels.HSV[x][y].V
-			if val < float64(lower) || val > float64(upper) {
+			val := b(i.Pixels[x][y])
+			if val < lower || val > upper {
 				intervals[y] = append(intervals[y], x)
 			}
 		}
@@ -45,8 +40,8 @@ func threshold(i utils.Image, lower, upper int) [][]int {
 	return intervals
 }
 
-func QSort(arr []utils.PixelHSV) []utils.PixelHSV {
-	newArr := make([]utils.PixelHSV, len(arr))
+func QSort(arr []utils.PixelRGBA) []utils.PixelRGBA {
+	newArr := make([]utils.PixelRGBA, len(arr))
 
 	for i, v := range arr {
 		newArr[i] = v
@@ -57,7 +52,7 @@ func QSort(arr []utils.PixelHSV) []utils.PixelHSV {
 	return newArr
 }
 
-func qsort(arr []utils.PixelHSV, start, end int) {
+func qsort(arr []utils.PixelRGBA, start, end int) {
 	if (end - start) < 1 {
 		return
 	}
@@ -66,7 +61,7 @@ func qsort(arr []utils.PixelHSV, start, end int) {
 	splitIndex := start
 
 	for i := start; i < end; i++ {
-		if arr[i].V < pivot.V {
+		if b(arr[i]) < b(pivot) {
 			temp := arr[splitIndex]
 
 			arr[splitIndex] = arr[i]
@@ -83,77 +78,38 @@ func qsort(arr []utils.PixelHSV, start, end int) {
 	qsort(arr, splitIndex+1, end)
 }
 
-// Quick sorts pixels based on given pixel value.
-// 0 = Hue, 1 = Saturation, 2 = value
-func QuickSort(a []utils.PixelHSV, sortType HSV) []utils.PixelHSV {
-	if len(a) < 2 {
-		return a
-	}
-	l, r := 0, len(a)-1
-	p := rand.Int() % len(a)
-	a[p], a[r] = a[r], a[p]
-
-	for i := range a {
-		if sortType == Hue {
-			if a[i].H < a[r].H {
-				a[l], a[i] = a[i], a[l]
-				l++
-			}
-		}
-		if sortType == Saturation {
-			if a[i].S < a[r].S {
-				a[l], a[i] = a[i], a[l]
-				l++
-			}
-		}
-		if sortType == Value {
-			if a[i].V > a[r].V {
-				a[l], a[i] = a[i], a[l]
-				l++
-			}
-		}
-	}
-
-	a[l], a[r] = a[r], a[l]
-
-	QuickSort(a[:l], sortType)
-	QuickSort(a[l+1:], sortType)
-
-	return a
-}
-
 func SortRowsQuick(i *utils.Image) [][]utils.PixelRGBA {
 	//spew.Dump(i.Pixels.HSV)
 	var sorted [][]utils.PixelRGBA
 	var sortedRow []utils.PixelRGBA
 	for y := 0; y < i.Bounds.Max.Y; y++ {
-		spew.Dump(i.Pixels.HSV[y])
-		fmt.Print("---------------------------------------------------\n")
-		sortedRow = utils.HSVArraytoRGBAArray(QSort(i.Pixels.HSV[y]))
-		spew.Dump(sortedRow)
+		sortedRow = QSort(i.Pixels[y])
 		sorted = append(sorted, sortedRow)
 	}
 	return sorted
 }
 
-func SortRows(i *utils.Image, sortType HSV) {
-	var sorted [][]utils.PixelHSV
-	grid := i.Pixels.HSV
+func NewSorted(i *utils.Image) image.Image {
+	sorted := SortRowsQuick(i)
+	nir := image.NewRGBA(i.Bounds)
+	for y := i.Bounds.Min.Y; y < i.Bounds.Max.Y; y++ {
+		for x := i.Bounds.Min.X; x < i.Bounds.Max.X; x++ {
+			nir.Set(x, y, sorted[y][x])
+		}
+	}
+	return nir
+}
+
+func SortRows(i *utils.Image) {
+	var sorted [][]utils.PixelRGBA
+	grid := i.Pixels
 	for y := 0; y < i.Bounds.Max.Y; y++ {
 		for x := range grid[y] {
 			sort.Slice(grid[y], func(i, j int) bool {
-				switch sortType {
-				case Hue:
-					return grid[y][x].H < grid[y][x].H
-				case Saturation:
-					return grid[y][x].S < grid[y][x].S
-				case Value:
-					return grid[y][x].V < grid[y][x].V
-				}
-				return false
+				return b(grid[y][x]) < b(grid[y][x])
 			})
 			sorted = append(sorted, grid[y])
 		}
 	}
-	i.Pixels.HSV = sorted
+	i.Pixels = sorted
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 
+	"git.neveris.one/gryffyn/snowcrash/models/pixelSort"
 	"git.neveris.one/gryffyn/snowcrash/utils"
 	"github.com/davecgh/go-spew/spew"
 )
@@ -24,13 +25,13 @@ func main() {
 	img := new(utils.Image)
 	img.Open(arg[0])
 	err := img.GetPixelsRGB()
-	img.ToHSV()
+	sorted := pixelSort.NewSorted(img)
 
 	fmt.Println("Image dimensions: ")
 	spew.Dump(img.Bounds)
 
 	// pixelSort.SortRowsQuick(img, pixelSort.Value)
-	img.Write(arg[3])
+	img.Write(arg[3], sorted)
 
 	/* fmt.Print("PixelRGBA at " + strconv.Itoa(x) + "," + strconv.Itoa(y) + " is: ")
 	fmt.Print(img.PixelsRGBA[x][y])
