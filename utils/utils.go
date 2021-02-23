@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 
+	"git.neveris.one/gryffyn/snowcrash/models/pixelSort"
 	r2h "github.com/AlessandroPomponio/hsv/conversion"
 )
 
@@ -58,10 +59,11 @@ func (i *Image) GetPixelsRGB() error {
 			row = append(row, rgbaToPixel(r, g, b, a))
 		}
 		pixels = append(pixels, row)
-		for i := len(pixels)/2 - 1; i >= 0; i-- {
-			opp := len(pixels) - 1 - i
-			pixels[i], pixels[opp] = pixels[opp], pixels[i]
-		}
+		/*
+			for i := len(pixels)/2 - 1; i >= 0; i-- {
+				opp := len(pixels) - 1 - i
+				pixels[i], pixels[opp] = pixels[opp], pixels[i]
+			}*/
 	}
 	i.Pixels.RGBA = pixels
 	return err
@@ -96,12 +98,23 @@ func (i *Image) Open(path string) {
 func (i *Image) Write(path string) {
 	file, err := os.Create(path)
 
-	img := overwritePixels(i)
+	img := writeNewSorted(i)
 
 	err = png.Encode(file, img)
 	if err != nil {
 		log.Fatalln("file could not be written")
 	}
+}
+
+func writeNewSorted(i *Image) image.Image {
+	sorted := pixelSort.SortRowsQuick(i)
+	nir := image.NewRGBA(i.Bounds)
+	for y := i.Bounds.Min.Y; y < i.Bounds.Max.Y; y++ {
+		for x := i.Bounds.Min.X; x < i.Bounds.Max.X; x++ {
+			nir.Set(x, y, sorted[y][x])
+		}
+	}
+	return nir
 }
 
 func overwritePixels(i *Image) image.Image {
@@ -141,4 +154,61 @@ func RGBAToHSV(p PixelRGBA) PixelHSV {
 	var hsv PixelHSV
 	hsv.H, hsv.S, hsv.V = r2h.RGBAToHSV(p.R, p.G, p.B, p.A)
 	return hsv
+}
+
+func hsvtoRGB(v1, v2, h float64) float64 {
+	if h < 0 {
+		h += 1
+	}
+	if h > 1 {
+		h -= 1
+	}
+	switch {
+	case 6*h < 1:
+		return (v1 + (v2-v1)*6*h)
+	case 2*h < 1:
+		return v2
+	case 3*h < 2:
+		return v1 + (v2-v1)*((2.0/3.0)-h)*6
+	}
+	return v1
+}
+
+func ftu(f float64) uint32 {
+	// return uint32(math.Floor(f * 100))
+	return uint32(f)
+}
+
+func HSVToRGBA(c PixelHSV) PixelRGBA {
+	h := c.H
+	s := c.S
+	l := c.V
+
+	if s == 0 {
+		// it's gray
+		return PixelRGBA{ftu(l), ftu(l), ftu(l), 255}
+	}
+
+	var v1, v2 float64
+	if l < 0.5 {
+		v2 = l * (1 + s)
+	} else {
+		v2 = (l + s) - (s * l)
+	}
+
+	v1 = 2*l - v2
+
+	r := hsvtoRGB(v1, v2, h+(1.0/3.0))
+	g := hsvtoRGB(v1, v2, h)
+	b := hsvtoRGB(v1, v2, h-(1.0/3.0))
+
+	return PixelRGBA{ftu(r), ftu(g), ftu(b), 255}
+}
+
+func HSVArraytoRGBAArray(h []PixelHSV) []PixelRGBA {
+	var r []PixelRGBA
+	for _, p := range h {
+		r = append(r, HSVToRGBA(p))
+	}
+	return r
 }
