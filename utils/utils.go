@@ -2,7 +2,7 @@ package utils
 
 import (
 	"image"
-	"image/draw"
+	"image/png"
 	"io"
 	"log"
 	"os"
@@ -12,10 +12,14 @@ import (
 )
 
 type PixelRGBA struct {
-	R uint8
-	G uint8
-	B uint8
-	A uint8
+	R uint32
+	G uint32
+	B uint32
+	A uint32
+}
+
+func (p PixelRGBA) RGBA() (r, g, b, a uint32) {
+	return p.R, p.G, p.B, p.A
 }
 
 type PixelHSV struct {
@@ -24,12 +28,16 @@ type PixelHSV struct {
 	V float64
 }
 
+type Pixels struct {
+	RGBA [][]PixelRGBA
+	HSV  [][]PixelHSV
+}
+
 type Image struct {
-	File       io.Reader
-	PixelsRGBA [][]PixelRGBA
-	PixelsHSV  [][]PixelHSV
-	Height     int
-	Width      int
+	File   io.Reader
+	Image  image.Image
+	Bounds image.Rectangle
+	Pixels Pixels
 }
 
 func (i *Image) GetPixels() error {
@@ -38,59 +46,43 @@ func (i *Image) GetPixels() error {
 
 func (i *Image) GetPixelsRGB() error {
 	img, _, err := image.Decode(i.File)
-	rect := img.Bounds()
-	rgba := image.NewRGBA(rect)
-	draw.Draw(rgba, rect, img, rect.Min, draw.Src)
+	i.Image = img
+	i.Bounds = img.Bounds()
 
 	var pixels [][]PixelRGBA
-	var r, g, b, a uint8
-	for y := 0; y < rect.Max.Y; y++ {
+	var r, g, b, a uint32
+	for y := i.Bounds.Min.Y; y < i.Bounds.Max.Y; y++ {
 		var row []PixelRGBA
-		for x := 0; x < rect.Max.X; x++ {
-			r = rgba.Pix[(y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4]
-			g = rgba.Pix[((y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4)+1]
-			b = rgba.Pix[((y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4)+2]
-			a = rgba.Pix[((y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4)+3]
+		for x := i.Bounds.Min.X; x < i.Bounds.Max.X; x++ {
+			r, g, b, a = img.At(x, y).RGBA()
 			row = append(row, rgbaToPixel(r, g, b, a))
 		}
 		pixels = append(pixels, row)
+		for i := len(pixels)/2 - 1; i >= 0; i-- {
+			opp := len(pixels) - 1 - i
+			pixels[i], pixels[opp] = pixels[opp], pixels[i]
+		}
 	}
-	i.PixelsRGBA = pixels
+	i.Pixels.RGBA = pixels
 	return err
 }
 
 func (i *Image) GetPixelsHSV() error {
-	img, _, err := image.Decode(i.File)
-	rect := img.Bounds()
-	rgba := image.NewRGBA(rect)
-	draw.Draw(rgba, rect, img, rect.Min, draw.Src)
-
-	var pixels [][]PixelHSV
-	var r, g, b, a uint8
-	for y := 0; y < rect.Max.Y; y++ {
-		var row []PixelHSV
-		for x := 0; x < rect.Max.X; x++ {
-			r = rgba.Pix[(y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4]
-			g = rgba.Pix[((y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4)+1]
-			b = rgba.Pix[((y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4)+2]
-			a = rgba.Pix[((y-rect.Min.Y)*rgba.Stride+(x-rect.Min.X)*4)+3]
-			row = append(row, RGBAToHSV(rgbaToPixel(r, g, b, a)))
-		}
-		pixels = append(pixels, row)
-	}
-	i.PixelsHSV = pixels
+	err := i.GetPixelsRGB()
+	i.ToHSV()
 	return err
 }
 
 func (i *Image) ToHSV() {
 	var pixels [][]PixelHSV
-	for _, v := range i.PixelsRGBA {
+	for _, v := range i.Pixels.RGBA {
 		var row []PixelHSV
 		for _, x := range v {
 			row = append(row, RGBAToHSV(x))
 		}
+		pixels = append(pixels, row)
 	}
-	i.PixelsHSV = pixels
+	i.Pixels.HSV = pixels
 }
 
 func (i *Image) Open(path string) {
@@ -101,7 +93,28 @@ func (i *Image) Open(path string) {
 	i.File = file
 }
 
-func rgbaToPixel(r uint8, g uint8, b uint8, a uint8) PixelRGBA { return PixelRGBA{r, g, b, a} }
+func (i *Image) Write(path string) {
+	file, err := os.Create(path)
+
+	img := overwritePixels(i)
+
+	err = png.Encode(file, img)
+	if err != nil {
+		log.Fatalln("file could not be written")
+	}
+}
+
+func overwritePixels(i *Image) image.Image {
+	nir := image.NewRGBA(i.Bounds)
+	for y := i.Bounds.Min.Y; y < i.Bounds.Max.Y; y++ {
+		for x := i.Bounds.Min.X; x < i.Bounds.Max.X; x++ {
+			nir.Set(x, y, i.Pixels.RGBA[y][x])
+		}
+	}
+	return nir
+}
+
+func rgbaToPixel(r uint32, g uint32, b uint32, a uint32) PixelRGBA { return PixelRGBA{r, g, b, a} }
 
 func Mph(hex string) string {
 	if len(hex) == 1 {
@@ -126,6 +139,6 @@ func RgbaToHex(p PixelRGBA, alpha bool) string {
 
 func RGBAToHSV(p PixelRGBA) PixelHSV {
 	var hsv PixelHSV
-	hsv.H, hsv.S, hsv.V = r2h.RGBAToHSV(uint32(p.R), uint32(p.G), uint32(p.B), uint32(p.A))
+	hsv.H, hsv.S, hsv.V = r2h.RGBAToHSV(p.R, p.G, p.B, p.A)
 	return hsv
 }
