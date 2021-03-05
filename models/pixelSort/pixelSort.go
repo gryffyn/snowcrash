@@ -26,15 +26,26 @@ def threshold(image, lower_threshold, upper_threshold, **kwargs):
 */
 
 // Function is from above python code.
-func threshold(i utils.Image, lower, upper uint32) [][]int {
+func thresholdGrid(i utils.Image, lower, upper uint32) [][]int {
 	var intervals [][]int
 	for y := 0; y < i.Bounds.Max.Y; y++ {
 		intervals = append(intervals, []int{})
-		for x := 0; x < i.Bounds.Max.X; y++ {
+		for x := 0; x < i.Bounds.Max.X; x++ {
 			val := b(i.Pixels[x][y])
 			if val < lower || val > upper {
 				intervals[y] = append(intervals[y], x)
 			}
+		}
+	}
+	return intervals
+}
+
+func thresholdRow(pa []utils.PixelRGBA, d image.Rectangle, lower, upper uint32) []int {
+	var intervals []int
+	for x := 0; x < d.Max.X; x++ {
+		val := b(pa[x])
+		if val < lower || val > upper {
+			intervals = append(intervals, x)
 		}
 	}
 	return intervals
@@ -61,6 +72,35 @@ func qsort(arr []utils.PixelRGBA, start, end int) {
 	splitIndex := start
 
 	for i := start; i < end; i++ {
+		if b(arr[i]) < b(pivot) {
+			temp := arr[splitIndex]
+
+			arr[splitIndex] = arr[i]
+			arr[i] = temp
+
+			splitIndex++
+		}
+	}
+
+	arr[end] = arr[splitIndex]
+	arr[splitIndex] = pivot
+
+	qsort(arr, start, splitIndex-1)
+	qsort(arr, splitIndex+1, end)
+}
+
+func qsort_thresh(arr []utils.PixelRGBA, start, end int, lower, upper uint32) {
+	if (end - start) < 1 {
+		return
+	}
+
+	pivot := arr[end]
+	splitIndex := start
+
+	for i := start; i < end; i++ {
+		if b(arr[i]) < lower || b(arr[i]) > upper {
+
+		}
 		if b(arr[i]) < b(pivot) {
 			temp := arr[splitIndex]
 

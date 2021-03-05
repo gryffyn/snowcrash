@@ -20,6 +20,10 @@ func (p PixelRGBA) RGBA() (r, g, b, a uint32) {
 	return p.R, p.G, p.B, p.A
 }
 
+func NewRBGA(r, g, b, a uint32) PixelRGBA {
+	return PixelRGBA{R: r, G: g, B: b, A: a}
+}
+
 type Image struct {
 	File   io.Reader
 	Image  image.Image
@@ -56,6 +60,7 @@ func (i *Image) GetPixelsRGB() error {
 }
 
 func (i *Image) Open(path string) {
+	log.Println("Opening file " + path)
 	file, err := os.Open(path)
 	if err != nil {
 		log.Fatalln("Error: File could not be opened")

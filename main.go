@@ -1,43 +1,46 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"image/png"
 	"log"
-	"os"
-	"strconv"
 
+	"git.neveris.one/gryffyn/snowcrash/models/glitch"
 	"git.neveris.one/gryffyn/snowcrash/models/pixelSort"
 	"git.neveris.one/gryffyn/snowcrash/utils"
-	"github.com/davecgh/go-spew/spew"
 )
 
 func main() {
-	arg := os.Args[1:]
-	if len(arg) < 4 {
-		log.Fatal("Usage: snowcrash <png file> <int x> <int y>")
-	}
-	_, _ = strconv.Atoi(arg[1])
-	_, _ = strconv.Atoi(arg[2])
+
+	pngName := "test/image0"
+
 	image.RegisterFormat("png", "png", png.Decode, png.DecodeConfig)
 
 	img := new(utils.Image)
-	img.Open(arg[0])
+	img.Open(pngName + ".png")
 	err := img.GetPixelsRGB()
-	sorted := pixelSort.NewSorted(img)
 
-	fmt.Println("Image dimensions: ")
-	spew.Dump(img.Bounds)
+	// sort pixels
+	_ = pixelSort.NewSorted(img)
 
-	// pixelSort.SortRowsQuick(img, pixelSort.Value)
-	img.Write(arg[3], sorted)
-
+	// diag stuff
 	/* fmt.Print("PixelRGBA at " + strconv.Itoa(x) + "," + strconv.Itoa(y) + " is: ")
 	fmt.Print(img.PixelsRGBA[x][y])
 	fmt.Println("\nHex: #" + utils.RgbaToHex(img.PixelsRGBA[x][y], false))
 	fmt.Print("PixelHSV at " + strconv.Itoa(x) + "," + strconv.Itoa(y) + " is: ")
 	fmt.Print(img.Pixels.HSV[y][x]) */
+
+	// test shifting pixels
+	s := glitch.RandScaledShift(img.Bounds)
+	log.Println(s)
+	shifted := glitch.ShiftChannel(img.Image, 0, 3, 72)
+	// shifted2 := glitch.ShiftChannel(shifted, 3, 1, s.X)
+
+	// write final image
+	img.Write(pngName+"_shifted.png", shifted) // shifted
+	// img.Write(pngName+ "_out_sorted.png", sorted) // sorted
+
+	log.Println("Written file")
 
 	if err != nil {
 		log.Fatal("Error: Image could not be decoded")
